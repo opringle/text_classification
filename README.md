@@ -15,3 +15,7 @@ I want to do meaningful analysis.This means it will need to be stored locally. T
 I want to do everything on a huge dataset also (4GB of transit data is fine)
 
 store cmbc data in haddop on your machine?
+
+1) need to be training the model in EMR
+2) need to be hosting the data in amazon s3 bucket
+3) decide whether or not to serialize the model
