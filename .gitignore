@@ -1,2 +1,4 @@
-#dont commit data files
+#dont commit these files
 /data 
+/vscode
+*.pem
