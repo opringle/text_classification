@@ -99,7 +99,7 @@ Now in your instance terminal you can type `rmate <filename>` and it will open i
 
 Personally that's enough for the night for me so lets logout by typing `$ exit` and then stop the instance in our local terminal using `$ stop-instances --instance-ids <your instance ID>`
 
-## The goal
+## Prepare input data
 
 The plan is to use MXNet to analze the NYC flights dataset.  
 
@@ -144,6 +144,44 @@ cat train.csv | cut -d, -f13,14 > x_train.csv
 cat test.csv | cut -d, -f13,14 > x_test.csv
 ```
 
+## Training script
+
+The script in the src directory trains a regression model 
+
+## Hyperparameter optimization
+
+Find best parameters
+
+## Distribute to many GPUs
+
+## Results
+
+
+# Notes
+
+I want to learn how to optimize a neural network to not overfit and predict well.  If I used CMBC's data I can have a spark preprocessing script
+
+Dataset needs to:
+
+1) Provide a hard problem for model tuning, regularization etc
+2) Make sense to serialize and deploy
+
+
+
+
+
+
+Blog about fitting a NN to all of translink's data.  No longer a follow along.  
+
+Preprocess the data in pyspark (stop groups etc , outliers etc)
+
+Train MXNet NN in dsitributed manner on many GPU's
+
+Talk about hyperparameter optimization
+
+data > preprocessed data > csv > MXNet model
+
+z
 
 
 
@@ -152,7 +190,8 @@ cat test.csv | cut -d, -f13,14 > x_test.csv
 
 
 
+#Tuesday Oct 24th
 
-
-
-
+- Lets user CMBC data
+1) preprocess into x and y in spark
+2) process x and y in mxnet
