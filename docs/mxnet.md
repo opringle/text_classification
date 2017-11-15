@@ -188,10 +188,17 @@ z
 
 
 
-
-
 #Tuesday Oct 24th
 
 - Lets user CMBC data
 1) preprocess into x and y in spark
 2) process x and y in mxnet
+
+
+
+#Blog ideas
+
+- Do your blog post so well it could be published in a data science blog!
+- In that case showcase your engineering AND ml AND communication skills
+- FEA model gives you the relationship between a load vector and the stress in a mechanical part
+- 

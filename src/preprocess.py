@@ -28,55 +28,106 @@ sqlContext = SQLContext(sc)
 
 #modules for transforming input data :)
 from pyspark.ml.feature import SQLTransformer
+from pyspark.ml.feature import MinMaxScaler
 from pyspark.ml.feature import OneHotEncoder
 from pyspark.ml.feature import StringIndexer
 from pyspark.ml.feature import VectorAssembler
 
+from pyspark.sql.types import StructType
+from pyspark.sql.types import StructField
+from pyspark.sql.types import StringType
+from pyspark.sql.types import ArrayType
+from pyspark.sql.types import IntegerType
+from pyspark.sql.types import FloatType
+from pyspark.ml.linalg import Vectors, VectorUDT
+from pyspark.sql.functions import udf
+from pyspark.ml.linalg import DenseVector
+
 #use pipeline because its awesome
 from pyspark.ml import Pipeline
 
-#read csv file into pyspark df
-df = sqlContext.read.format('com.databricks.spark.csv').options(header='true', inferschema='true').load('../data/test.csv')
-df =df.limit(300)
-print "DF \n \n \n"
-print df.collect()
+#select categorical/continuous cols and label
+bin_cols = ['depot_code']
+cat_cols = ['linegroup_no', 'from_stop_group', 'to_stop_group']
+cont_cols = ["from_act_leave_time"]
+label_col = []
+feature_cols = bin_cols + cat_cols + cont_cols
+output_feature_cols = [s + "_indexed" for s in bin_cols] + [s + "_indexed_encoded_densified" for s in cat_cols] + [s + "_scaled" for s in cont_cols]
+
+#read csv into pyspark df, automatically infering schema
+df = spark.read.csv("../data/test.csv", encoding="utf-8", inferSchema = True, header=True)# schema=df_schema)
+df = df.limit(300)
+print df.show(n=2)
+
+#convert string col to double type
+# from pyspark.sql.types import DoubleType
+# df = df.withColumn("from_act_leave_time",df["from_act_leave_time"].cast(DoubleType()))
 
 #varous sql transformers defined and stored in a list
-sql1 = SQLTransformer(statement="SELECT depot_code, linegroup_no, from_stop_group, to_stop_group, from_act_leave_time FROM __THIS__")
+sql1 = SQLTransformer(
+    statement="SELECT " + ",".join(feature_cols) + " FROM __THIS__")
 sql_transformations = [sql1]
 
-#select categorical cols
-cols = ['from_stop_group', 'to_stop_group']
-
-#index strings in categorical cols to numerical categoricals
-indexers = [
+#index strings in categorical and binary cols to numerical categoricals
+binary_indexers = [
     StringIndexer(inputCol=c, outputCol="{0}_indexed".format(c))
-    for c in cols
+    for c in bin_cols
 ]
 
-#one hot encode indexed categorical (this drops the last category)
+categorical_indexers = [
+    StringIndexer(inputCol=c, outputCol="{0}_indexed".format(c))
+    for c in cat_cols
+]
+
+#one hot encode indexed categorical
 encoders = [
-    StringIndexer(
-        inputCol=indexer.getOutputCol(),
-        outputCol="{0}_encoded".format(indexer.getOutputCol()))
-    for indexer in indexers
+    OneHotEncoder(dropLast=False,
+                  inputCol=indexer.getOutputCol(),
+                  outputCol="{0}_encoded".format(indexer.getOutputCol()))
+    for indexer in categorical_indexers
 ]
 
-#assemble features into single column for ml, specify dense vector format which MXNet requires
-assembler = VectorAssembler(inputCols=[encoder.getOutputCol() for encoder in encoders], 
-                            outputCol="features")
+#use pyspark minmaxscaler as a hack to densify a sparse vector
+densifiers = [
+    MinMaxScaler(min=0.0, max=1.0, 
+                 inputCol=encoder.getOutputCol(),
+                 outputCol="{0}_densified".format(encoder.getOutputCol()))
+    for encoder in encoders
+]
+
+#scale continous columns to be between 0 and 1 for deep learning
+scalers = [
+    MinMaxScaler(min=0.0, max=1.0, inputCol=c,
+                 outputCol="{0}_scaled".format(c))
+    for c in cont_cols
+]
+
+#use SQL to select columns to keep in pipeline
+col_selector = SQLTransformer(
+    statement="SELECT " + ",".join(output_feature_cols) + " FROM __THIS__")
+
 
 #add everything into a pipeline
-pipeline = Pipeline(stages=sql_transformations + indexers + encoders + [assembler])
+pipeline = Pipeline(stages=sql_transformations + binary_indexers + categorical_indexers + encoders + densifiers + scalers + [col_selector])
 
 #fit the pipeline to the df
 pipeline = pipeline.fit(df)
 
-#transform from input to output
-rdd = pipeline.transform(df).features.rdd
+#use it to transform input data 
+df = pipeline.transform(df)
 
-frequencyDenseVectors = rdd.map(lambda vector: DenseVector(vector.toArray())
+print df.show(n=2)
+
+types = [f.dataType for f in df.schema.fields]
+
+print types
+
+#combine all feature columns into a single vector
+
 
 #write to resulting df to a csv in results directory
 import pandas as pd
 df.toPandas().to_csv('../data/mycsv.csv')
+
+
+
