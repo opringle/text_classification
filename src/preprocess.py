@@ -1,133 +1,74 @@
-##################################################################################
-# start a local spark session
-# https://spark.apache.org/docs/0.9.0/python-programming-guide.html
-# spark-submit --packages com.databricks: spark - csv_2.10: 1.4.0
-##################################################################################
-from pyspark import SparkContext, SparkConf, SQLContext
-conf = SparkConf()
+#!/usr/bin/env python
 
-#set app name
-conf.set("spark.app.name", "train classifier")
-#Run Spark locally with as many worker threads as logical cores on your machine (cores X threads).
-conf.set("spark.master", "local[*]")
-#number of cores to use for the driver process (only in cluster mode)
-conf.set("spark.driver.cores", "1")
-#Limit of total size of serialized results of all partitions for each Spark action (e.g. collect)
-conf.set("spark.driver.maxResultSize", "1g")
-#Amount of memory to use for the driver process
-conf.set("spark.driver.memory", "1g")
-#Amount of memory to use per executor process (e.g. 2g, 8g).
-conf.set("spark.executor.memory", "2g")
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 
-#pass configuration to the spark context object along with code dependencies
-sc = SparkContext(conf=conf, pyFiles=[])
-from pyspark.sql.session import SparkSession
-spark = SparkSession(sc)
-sqlContext = SQLContext(sc)
-##################################################################################
+# -*- coding: utf-8 -*-
 
-#modules for transforming input data :)
-from pyspark.ml.feature import SQLTransformer
-from pyspark.ml.feature import MinMaxScaler
-from pyspark.ml.feature import OneHotEncoder
-from pyspark.ml.feature import StringIndexer
-from pyspark.ml.feature import VectorAssembler
-
-from pyspark.sql.types import StructType
-from pyspark.sql.types import StructField
-from pyspark.sql.types import StringType
-from pyspark.sql.types import ArrayType
-from pyspark.sql.types import IntegerType
-from pyspark.sql.types import FloatType
-from pyspark.ml.linalg import Vectors, VectorUDT
-from pyspark.sql.functions import udf
-from pyspark.ml.linalg import DenseVector
-
-#use pipeline because its awesome
-from pyspark.ml import Pipeline
-
-#select categorical/continuous cols and label
-bin_cols = ['depot_code']
-cat_cols = ['linegroup_no', 'from_stop_group', 'to_stop_group']
-cont_cols = ["from_act_leave_time"]
-label_col = []
-feature_cols = bin_cols + cat_cols + cont_cols
-output_feature_cols = [s + "_indexed" for s in bin_cols] + [s + "_indexed_encoded_densified" for s in cat_cols] + [s + "_scaled" for s in cont_cols]
-
-#read csv into pyspark df, automatically infering schema
-df = spark.read.csv("../data/test.csv", encoding="utf-8", inferSchema = True, header=True)# schema=df_schema)
-df = df.limit(300)
-print df.show(n=2)
-
-#convert string col to double type
-# from pyspark.sql.types import DoubleType
-# df = df.withColumn("from_act_leave_time",df["from_act_leave_time"].cast(DoubleType()))
-
-#varous sql transformers defined and stored in a list
-sql1 = SQLTransformer(
-    statement="SELECT " + ",".join(feature_cols) + " FROM __THIS__")
-sql_transformations = [sql1]
-
-#index strings in categorical and binary cols to numerical categoricals
-binary_indexers = [
-    StringIndexer(inputCol=c, outputCol="{0}_indexed".format(c))
-    for c in bin_cols
-]
-
-categorical_indexers = [
-    StringIndexer(inputCol=c, outputCol="{0}_indexed".format(c))
-    for c in cat_cols
-]
-
-#one hot encode indexed categorical
-encoders = [
-    OneHotEncoder(dropLast=False,
-                  inputCol=indexer.getOutputCol(),
-                  outputCol="{0}_encoded".format(indexer.getOutputCol()))
-    for indexer in categorical_indexers
-]
-
-#use pyspark minmaxscaler as a hack to densify a sparse vector
-densifiers = [
-    MinMaxScaler(min=0.0, max=1.0, 
-                 inputCol=encoder.getOutputCol(),
-                 outputCol="{0}_densified".format(encoder.getOutputCol()))
-    for encoder in encoders
-]
-
-#scale continous columns to be between 0 and 1 for deep learning
-scalers = [
-    MinMaxScaler(min=0.0, max=1.0, inputCol=c,
-                 outputCol="{0}_scaled".format(c))
-    for c in cont_cols
-]
-
-#use SQL to select columns to keep in pipeline
-col_selector = SQLTransformer(
-    statement="SELECT " + ",".join(output_feature_cols) + " FROM __THIS__")
-
-
-#add everything into a pipeline
-pipeline = Pipeline(stages=sql_transformations + binary_indexers + categorical_indexers + encoders + densifiers + scalers + [col_selector])
-
-#fit the pipeline to the df
-pipeline = pipeline.fit(df)
-
-#use it to transform input data 
-df = pipeline.transform(df)
-
-print df.show(n=2)
-
-types = [f.dataType for f in df.schema.fields]
-
-print types
-
-#combine all feature columns into a single vector
-
-
-#write to resulting df to a csv in results directory
 import pandas as pd
-df.toPandas().to_csv('../data/mycsv.csv')
+import logging
+import argparse
+import os
+
+logging.basicConfig(level=logging.DEBUG)
+
+parser = argparse.ArgumentParser(description="Preprocess csvs for mxnet example",
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('--train-url', type=str, help='url to download csv file',
+                    default='https://github.com/mhjabreel/CharCNN/raw/master/data/ag_news_csv/train.csv')
+parser.add_argument('--test-url', type=str, help='url to download csv file',
+                    default='https://github.com/mhjabreel/CharCNN/raw/master/data/ag_news_csv/test.csv')
 
 
+def preprocess(df):
+    """
+    :param df: pandas dataframe
+    :return: preprocessed pandas dataframe
+    """
+    index_to_label = {1: 'World', 2: 'Sports', 3: 'Business', 4: 'Sci/Tech'}
+    df['label'] = df['indexed_label'].map(index_to_label)
+    df.drop('indexed_label', inplace=True, axis=1)
+    return df
 
+
+def save(df, filename):
+    """
+    :param df: pandas dataframe
+    :param filename: path to output file
+    """
+    if not os.path.exists(os.path.dirname(filename)):
+        os.makedirs(os.path.dirname(filename))
+    df.to_csv(filename, index=None)
+
+
+if __name__ == '__main__':
+    # Parse args
+    args = parser.parse_args()
+
+    # Download data
+    train_df = pd.read_csv(args.train_url,
+                           names=['indexed_label', 'title', 'description'])
+    test_df = pd.read_csv(args.test_url,
+                           names=['indexed_label', 'title', 'description'])
+
+    # Preprocess
+    train_df = preprocess(train_df)
+    test_df = preprocess(test_df)
+
+    # Save to file
+    save(train_df, '../data/ag_news/train.csv')
+    save(test_df, '../data/ag_news/test.csv')

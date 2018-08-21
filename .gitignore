@@ -1,3 +1,4 @@
 #dont commit these files
 /.vscode
+/.idea
 /data
