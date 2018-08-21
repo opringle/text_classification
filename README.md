@@ -1,3 +1,3 @@
-# Aim
+# What
 
-To become competent deploying MXNet neural nets on EMR.
+- Notebooks for MXNet presentation.
