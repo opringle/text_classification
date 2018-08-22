@@ -197,12 +197,12 @@ def bucketed_module(train_iter, vocab_size, dropout, num_label, smooth_alpha, de
         print("label input: ", softmax_label.infer_shape(intent=Y_shape)[1][0])
 
         # Embed each character to 16 channels
-        embedded_data = mx.sym.Embedding(data, input_dim=vocab_size, output_dim=16)
-        embedded_data = mx.sym.Reshape(mx.sym.transpose(embedded_data, axes=(0, 2, 1)), shape=(0, 0, 1, -1))
+        embedded_data = mx.sym.Embedding(data, input_dim=vocab_size, output_dim=16, name='embedding')
+        embedded_data = mx.sym.Reshape(mx.sym.transpose(embedded_data, axes=(0, 2, 1)), shape=(0, 0, 1, -1), name='embedding_reshape')
         print("embed layer output shape: ", embedded_data.infer_shape(utterance=X_shape)[1][0])
 
         # Temporal Convolutional Layer (without activation)
-        temp_conv = mx.sym.Convolution(embedded_data, kernel=(1, 3), num_filter=64, pad=(0, 1))
+        temp_conv = mx.sym.Convolution(embedded_data, kernel=(1, 3), num_filter=64, pad=(0, 1), name='temp_conv')
         print("Temp conv output shape: ", temp_conv.infer_shape(utterance=X_shape)[1][0])
 
         # Create convolutional blocks with pooling in-between
@@ -227,13 +227,13 @@ def bucketed_module(train_iter, vocab_size, dropout, num_label, smooth_alpha, de
 
         pool_k = seq_len // 8
         print("{0} pool kernel size {1}, stride 1".format('avg', pool_k))
-        block = mx.sym.flatten(mx.sym.Pooling(block, kernel=(1, pool_k), stride=(1, 1), pad=(0, 0), pool_type='avg'))
+        block = mx.sym.flatten(mx.sym.Pooling(block, kernel=(1, pool_k), stride=(1, 1), pad=(0, 0), pool_type='avg'), name='final_pooling')
         print("flattened pooling output shape: {}".format(block.infer_shape(utterance=X_shape)[1][0]))
         block = mx.sym.Dropout(block, p=dropout)
-        print("dropout layer output shape: {}".format(block.infer_shape(utterance=X_shape)[1][0]))
+        print("dropout layer output shape: {}".format(block.infer_shape(utterance=X_shape)[1][0]), name='dropout')
 
         output = mx.sym.FullyConnected(block, num_hidden=num_label, flatten=True, name='output')
-        sm = mx.sym.SoftmaxOutput(output, softmax_label, smooth_alpha)
+        sm = mx.sym.SoftmaxOutput(output, softmax_label, smooth_alpha, name='softmax_ce_loss')
         print("softmax output shape: {}".format(sm.infer_shape(utterance=X_shape)[1][0]))
 
         return sm, ('utterance',), ('intent',)
