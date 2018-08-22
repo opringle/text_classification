@@ -229,8 +229,8 @@ def bucketed_module(train_iter, vocab_size, dropout, num_label, smooth_alpha, de
         print("{0} pool kernel size {1}, stride 1".format('avg', pool_k))
         block = mx.sym.flatten(mx.sym.Pooling(block, kernel=(1, pool_k), stride=(1, 1), pad=(0, 0), pool_type='avg'), name='final_pooling')
         print("flattened pooling output shape: {}".format(block.infer_shape(utterance=X_shape)[1][0]))
-        block = mx.sym.Dropout(block, p=dropout)
-        print("dropout layer output shape: {}".format(block.infer_shape(utterance=X_shape)[1][0]), name='dropout')
+        block = mx.sym.Dropout(block, p=dropout, name='dropout')
+        print("dropout layer output shape: {}".format(block.infer_shape(utterance=X_shape)[1][0]))
 
         output = mx.sym.FullyConnected(block, num_hidden=num_label, flatten=True, name='output')
         sm = mx.sym.SoftmaxOutput(output, softmax_label, smooth_alpha, name='softmax_ce_loss')
